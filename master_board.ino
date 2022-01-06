@@ -1,6 +1,7 @@
  // demo: CAN-BUS Shield, send data
   #include <df_can.h>
   #include <SPI.h>
+  //COM5
 
   const int SPI_CS_PIN = 10;
 
@@ -30,13 +31,11 @@
       }while(count--);
 
 }
-
-byte doggo[1] = {0};
-unsigned char data[4] = {'F','U','C','K'};
-void loop()
-  {
-      // send data:  id = 0x06, standrad flame, data len = 8, data: data buf
-      doggo[0] = (doggo[0] + 1) % 100;
-      CAN.sendMsgBuf(0x06, 0, 1, doggo);
-      delay(1000);                       // send data per 100ms
-  }
+  const int inputPIN = A0;
+  INT8U throttlePercentage[1] = {5};
+  void loop()
+    {
+        throttlePercentage[0] = analogRead(inputPIN);
+        CAN.sendMsgBuf(0x06, 0, 1, throttlePercentage);
+        delay(1000);                       // send data per 100ms
+    }
