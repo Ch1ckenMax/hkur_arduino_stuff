@@ -11,7 +11,7 @@ void setup()
   int count = 50;                                     // the max numbers of initializint the CAN-BUS, if initialize failed first!.
   do {
     CAN.init();   //must initialize the Can interface here!
-    if (CAN_OK == CAN.begin(CAN_500KBPS))                  // init can bus : baudrate = 500k
+    if (CAN_OK == CAN.begin(CAN_250KBPS))                  // init can bus : baudrate = 500k
     {
       Serial.println("DFROBOT's CAN BUS Shield init ok!");
       break;
@@ -30,8 +30,8 @@ void setup()
 
 }
 
-INT8U buf[2] = {0,0};
-INT8U len = 2;
+INT8U buf[8] = {0,0,0,0,0,0,0,0};
+INT8U len = 8;
 
 void loop()
 {
@@ -44,12 +44,9 @@ void loop()
       Serial.print((int) buf[i]);
       Serial.print("\t");
 
-      delay(250);
+      //delay(250);
     }
     Serial.println();
   }
-  else {
-    Serial.print("NO SIGNAL");
-    delay(1000);
-  }
+
 }
