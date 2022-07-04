@@ -31,11 +31,19 @@
       }while(count--);
 
 }
-  const int inputPIN = A0;
-  INT8U throttlePercentage[1] = {5};
+  const int inputPIN1 = A0;
+  const int inputPIN2 = A1;
+  INT8U throttlePercentage[2] = {5,5};
   void loop()
     {
-        throttlePercentage[0] = analogRead(inputPIN);
-        CAN.sendMsgBuf(0x06, 0, 1, throttlePercentage);
-        delay(1000);                       // send data per 100ms
+        //Read raw data
+        Serial.print(analogRead(inputPIN1));
+        Serial.print(' ');
+        Serial.print(analogRead(inputPIN2));
+        Serial.print('\n');
+        
+        //throttlePercentage[0] = analogRead(inputPIN1);
+        //throttlePercentage[1] = analogRead(inputPIN2);
+        //CAN.sendMsgBuf(0x06, 0, 2, throttlePercentage);
+        delay(25);                       // send data per 100ms
     }
