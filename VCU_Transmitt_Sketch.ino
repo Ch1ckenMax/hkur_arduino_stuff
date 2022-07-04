@@ -7,6 +7,11 @@ const int SPI_CS_PIN = 10;
 
 MCPCAN CAN(SPI_CS_PIN);                                    // Set CS pin
 
+void printBin(byte aByte) {
+  for (int8_t aBit = 7; aBit >= 0; aBit--)
+    Serial.write(bitRead(aByte, aBit) ? '1' : '0');
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -40,7 +45,7 @@ void loop()
 {
   //Read data and map them to suitable range
   throttle = (analogRead(inputPIN1) + analogRead(inputPIN2));
-  throttle = map(throttle, 450, 1070, 0, 255);
+  throttle = map(throttle, 475, 1090, 0, 255);
   //Serial.print("mapped throttle: ");
   //Serial.print(throttle);
   //Serial.print("  ");
@@ -58,10 +63,18 @@ void loop()
   // putting values into the 8 bytes
   TransmittPackage[0] = throttle;
 
-  //test if all 8 bytes can transmitt
-  //for (int i=0; i < 8; i++) {
-  //  TransmittPackage[i] = throttle;
-  //}
+//  test if all 8 bytes can transmitt
+//  for (int i=0; i < 8; i++) {
+//    TransmittPackage[i] = throttle;
+//  }
+
+  // printing the whole transmittpackage
+  for (int i=0; i < 8; i++) {
+    //printBin(TransmittPackage[i]);
+    Serial.print(TransmittPackage[i]);
+    Serial.print("  ");
+  }
+  Serial.print("\n");
   
   //send
   CAN.sendMsgBuf(0x06, 0, 8, TransmittPackage);
