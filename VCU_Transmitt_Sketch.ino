@@ -7,6 +7,20 @@ const int SPI_CS_PIN = 10;
 
 MCPCAN CAN(SPI_CS_PIN);                                    // Set CS pin
 
+//Generates the 8 byte dataPackage to be sent to the motor controller
+//Torque: in N.m. times 10
+//angularVelocity: in RPM
+void generateDataPackage(INT8U dataArr, int torque, int angularVelocity, bool directionForward, bool inverter, bool inverterDischarge, bool speedMode, int torqueLimit){
+  dataArr[0] = torque % 256;
+  dataArr[1] = torque / 256;
+  dataArr[2] = angularVelocity % 256;
+  dataArr[3] = angularVelocity / 256;
+  dataArr[4] = directionForward;
+  dataArr[5] = inverter + 2 * inverterDischarge + 4 * speedMode;
+  dataArr[6] = torqueLimit % 256;
+  dataArr[7] = torqueLimit / 256;
+}
+
 void printBin(byte aByte) {
   for (int8_t aBit = 7; aBit >= 0; aBit--)
     Serial.write(bitRead(aByte, aBit) ? '1' : '0');
@@ -45,7 +59,7 @@ void loop()
 {
   //Read data and map them to suitable range
   throttle = (analogRead(inputPIN1) + analogRead(inputPIN2));
-  throttle = map(throttle, 475, 1090, 0, 255);
+  throttle = map(throttle, 475, 1090, 0, 255);   //Max: deadzone for better stability? Shall narrow the gap between upper and lower limit?
   //Serial.print("mapped throttle: ");
   //Serial.print(throttle);
   //Serial.print("  ");
@@ -80,5 +94,5 @@ void loop()
   CAN.sendMsgBuf(0x06, 0, 8, TransmittPackage);
   
   // comment out the delay in practical use
-  delay(25);                       // send data per 100ms
+  delay(25);                       // send data per 25ms
 }
