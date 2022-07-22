@@ -7,6 +7,40 @@ const int SPI_CS_PIN = 10;
 
 MCPCAN CAN(SPI_CS_PIN);                                    // Set CS pin
 
+const int inputPIN1 = A0;
+const int inputPIN2 = A1;
+INT8U TransmittPackage[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+long throttle = 0;
+int driveMode = 0; // -1 = reverse, 0 = N, 1 = D
+bool inverterEnable = false;
+bool Forward = true; // true = forward, false = reverse
+
+const int BEEP_INTERVAL = 1500;
+#define BEEP_PIN 8
+unsigned int previousMillis;
+int beeped = 0;
+bool beepPinState;
+
+void millisBeep() {
+  unsigned int currentMillis = millis();
+  if (currentMillis - previousMillis >= BEEP_INTERVAL) {
+    if (beeped == 0) {
+      Serial.println("Ready to Drive Sound ON");
+      digitalWrite(BEEP_PIN, HIGH);
+      beeped = 1;
+
+    }
+    else {
+      Serial.println("Ready to Drive Sound OFF");
+      digitalWrite(BEEP_PIN, LOW);
+      beeped = 2;
+    }
+    previousMillis = currentMillis;
+  } else if (currentMillis - previousMillis <= 0) { // if millis overflow
+    previousMillis = currentMillis;
+  }
+}
+
 //Generates the 8 byte dataPackage to be sent to the motor controller
 //Torque: in N.m. times 10, eg 30 = 3Nm
 //angularVelocity: in RPM
@@ -33,6 +67,7 @@ void setup()
 
   pinMode(4, INPUT_PULLUP); // setting up drive mode pins
   pinMode(5, INPUT_PULLUP); // reverse gear pin
+  pinMode(BEEP_PIN, OUTPUT); // pin to trigger ready to drive sound
 
   int count = 50;                                     // the max numbers of initializint the CAN-BUS, if initialize failed first!.
   do {
@@ -56,17 +91,8 @@ void setup()
 
 }
 
-const int inputPIN1 = A0;
-const int inputPIN2 = A1;
-INT8U TransmittPackage[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-long throttle = 0;
-int driveMode = 0; // -1 = reverse, 0 = N, 1 = D
-bool inverterEnable = false;
-bool Forward = true; // true = forward, false = reverse
-
 void loop()
 {
-
   //Read data and map them to suitable range
   throttle = (analogRead(inputPIN1) + analogRead(inputPIN2));
   throttle = map(throttle, 500, 1050, 0, MAX_TORQUE);   //Max: deadzone for better stability? Shall narrow the gap between upper and lower limit?
@@ -89,21 +115,26 @@ void loop()
     driveMode = -1;
     inverterEnable = true;
     Forward = false;
-    
   }
   else {
     driveMode = 0;
     inverterEnable = false;
     Forward = true;
+    beeped = 0;
   }
-  
+
+  // ready to drive sound
+  if (driveMode != 0 && beeped != 2) {
+    millisBeep();
+  }
+
   //generateDataPackage(INT8U dataArr[], int torque, int angularVelocity, bool directionForward, bool inverter, bool inverterDischarge, bool speedMode, int torqueLimit)
   generateDataPackage(TransmittPackage, throttle, 0, Forward, inverterEnable, !inverterEnable, false, 0);
 
 
   for (int i = 0; i < 8; i++) {
     //printBin(TransmittPackage[i]);
-    printBin(TransmittPackage[i]);
+    Serial.print(TransmittPackage[i]);
     Serial.print("  ");
   }
   Serial.print("\n");
