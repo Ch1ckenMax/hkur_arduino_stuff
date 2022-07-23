@@ -59,12 +59,6 @@ void generateDataPackage(INT8U dataArr[], unsigned int torque, int angularVeloci
   dataArr[7] = torqueLimit / 256;
 }
 
-// print byte in binary format
-void printBin(byte aByte) {
-  for (int8_t aBit = 7; aBit >= 0; aBit--)
-    Serial.write(bitRead(aByte, aBit) ? '1' : '0');
-}
-
 void setup()
 {
   //PinModes
