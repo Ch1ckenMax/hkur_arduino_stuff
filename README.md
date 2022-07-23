@@ -1,5 +1,5 @@
-# hkur_arduino_stuff
-Arduino interface between driving input and motor controller for HKUR race car.
+# HKUR VCU Interface
+Interface between driving input and motor controller for HKUR race car. Implemented using Arduino + CAN BUS shield.
 
 Library used:<br>
 https://wiki.dfrobot.com/CAN-BUS_Shield_V2__SKU__DFR0370_#target_1<br>
