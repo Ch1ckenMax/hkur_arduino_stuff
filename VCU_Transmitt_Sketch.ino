@@ -1,46 +1,46 @@
 #include <df_can.h>
 #include <SPI.h>
 
-#define MAX_TORQUE 50 //Set the max torque of the motor here
+//CAN bus config
+const uint8_t SPI_CS_PIN = 10;
+MCPCAN CAN(SPI_CS_PIN);
+#define CANBaudRate CAN_250KBPS
 
-// defining which pin to read the drivemode here
-#define DRIVE_MODE_PIN 4
-#define REVERSE_MODE_PIN 5
+// Drive mode config
+const uint8_t DRIVE_MODE_PIN = 4;
+const uint8_t REVERSE_MODE_PIN = 5;
 
-const int SPI_CS_PIN = 10;
+//Beep config
+const uint8_t BEEP_PIN = 8;
+const int BEEP_INTERVAL = 1500;
 
-MCPCAN CAN(SPI_CS_PIN);                                    // Set CS pin
+//Throttle config
+const int MAX_TORQUE = 50; //Set the max torque of the motor here
+const uint8_t THROTTLE_PIN_A = A0;
+const uint8_t THROTTLE_PIN_B = A1;
 
-const int inputPIN1 = A0;
-const int inputPIN2 = A1;
+//Other Variables
 INT8U TransmittPackage[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 long throttle = 0;
-int driveMode = 0; // -1 = reverse, 0 = N, 1 = D
+uint8_t driveMode = 0; // 0 = reverse, 1 = neutral, 2 = drive
 bool inverterEnable = false;
-bool Forward = true; // true = forward, false = reverse
-
-const int BEEP_INTERVAL = 1500;
-#define BEEP_PIN 8
-unsigned int previousMillis;
-int beeped = 0;
-bool beepPinState;
+bool forward = true; // true = forward, false = reverse
+unsigned long previousMillis;
+uint8_t beeped = 0; // 0 = not beeped yet, 1 = beeping, 2 = beeping ended
 
 void millisBeep() {
-  unsigned int currentMillis = millis();
+  unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= BEEP_INTERVAL) {
     if (beeped == 0) {
       Serial.println("Ready to Drive Sound ON");
       digitalWrite(BEEP_PIN, HIGH);
       beeped = 1;
-
     }
     else {
       Serial.println("Ready to Drive Sound OFF");
       digitalWrite(BEEP_PIN, LOW);
       beeped = 2;
     }
-    previousMillis = currentMillis;
-  } else if (currentMillis - previousMillis <= 0) { // if millis overflow
     previousMillis = currentMillis;
   }
 }
@@ -59,24 +59,19 @@ void generateDataPackage(INT8U dataArr[], unsigned int torque, int angularVeloci
   dataArr[7] = torqueLimit / 256;
 }
 
-// print byte in binary format
-void printBin(byte aByte) {
-  for (int8_t aBit = 7; aBit >= 0; aBit--)
-    Serial.write(bitRead(aByte, aBit) ? '1' : '0');
-}
-
 void setup()
 {
-  Serial.begin(115200);
-
+  //PinModes
   pinMode(DRIVE_MODE_PIN, INPUT_PULLUP); // setting up drive mode pins
   pinMode(REVERSE_MODE_PIN, INPUT_PULLUP); // reverse gear pin
   pinMode(BEEP_PIN, OUTPUT); // pin to trigger ready to drive sound
 
-  int count = 50;                                     // the max numbers of initializint the CAN-BUS, if initialize failed first!.
+  //CAN bus connection initalization
+  Serial.begin(115200);
+  uint8_t count = 50;                                     // the max numbers of initializint the CAN-BUS, if initialize failed first!.
   do {
     CAN.init();   //must initialize the Can interface here!
-    if (CAN_OK == CAN.begin(CAN_250KBPS))                  // init can bus : baudrate = 500k
+    if (CAN_OK == CAN.begin(CANBaudRate))                  // init can bus : baudrate = 500k
     {
       Serial.println("DFROBOT's CAN BUS Shield init ok!");
       break;
@@ -98,8 +93,7 @@ void setup()
 void loop()
 {
   //Read data and map them to suitable range
-  throttle = (analogRead(inputPIN1) + analogRead(inputPIN2));
-  throttle = map(throttle, 500, 1050, 0, MAX_TORQUE);   //Max: deadzone for better stability? Shall narrow the gap between upper and lower limit?
+  throttle = map(analogRead(THROTTLE_PIN_A) + analogRead(THROTTLE_PIN_B), 500, 1050, 0, MAX_TORQUE);
 
   // Prevent overflow..
   if (throttle > MAX_TORQUE) {
@@ -110,42 +104,37 @@ void loop()
   }
 
   // setting up driveMode
-  if (!digitalRead(4)) {
-    driveMode = 1;
+  if (!digitalRead(DRIVE_MODE_PIN)) {
+    driveMode = 2;
     inverterEnable = true;
-    Forward = true;
+    forward = true;
   }
-  else if (!digitalRead(5)) {
-    driveMode = -1;
+  else if (!digitalRead(REVERSE_MODE_PIN)) {
+    driveMode = 0;
     inverterEnable = true;
-    Forward = false;
+    forward = false;
   }
   else {
-    driveMode = 0;
+    driveMode = 1;
     inverterEnable = false;
-    Forward = true;
+    forward = true;
     beeped = 0;
   }
 
   // ready to drive sound
-  if (driveMode != 0 && beeped != 2) {
+  if (driveMode != 1 && beeped != 2) {
     millisBeep();
   }
 
   //generateDataPackage(INT8U dataArr[], int torque, int angularVelocity, bool directionForward, bool inverter, bool inverterDischarge, bool speedMode, int torqueLimit)
-  generateDataPackage(TransmittPackage, throttle, 0, Forward, inverterEnable, !inverterEnable, false, 0);
+  generateDataPackage(TransmittPackage, throttle, 0, forward, inverterEnable, !inverterEnable, false, 0);
 
-
+  //Debug message in serial
   for (int i = 0; i < 8; i++) {
-    //printBin(TransmittPackage[i]);
     Serial.print(TransmittPackage[i]);
     Serial.print("  ");
   }
   Serial.print("\n");
 
-  //send
-  CAN.sendMsgBuf(0x0c0, 0, 8, TransmittPackage);
-
-  // comment out the delay in practical use
-  delay(25);         // send data per 25ms
+  CAN.sendMsgBuf(0x0c0, 0, 8, TransmittPackage); //send
 }
