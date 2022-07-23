@@ -3,6 +3,10 @@
 
 #define MAX_TORQUE 50 //Set the max torque of the motor here
 
+// defining which pin to read the drivemode here
+#define DRIVE_MODE_PIN 4
+#define REVERSE_MODE_PIN 5
+
 const int SPI_CS_PIN = 10;
 
 MCPCAN CAN(SPI_CS_PIN);                                    // Set CS pin
@@ -65,8 +69,8 @@ void setup()
 {
   Serial.begin(115200);
 
-  pinMode(4, INPUT_PULLUP); // setting up drive mode pins
-  pinMode(5, INPUT_PULLUP); // reverse gear pin
+  pinMode(DRIVE_MODE_PIN, INPUT_PULLUP); // setting up drive mode pins
+  pinMode(REVERSE_MODE_PIN, INPUT_PULLUP); // reverse gear pin
   pinMode(BEEP_PIN, OUTPUT); // pin to trigger ready to drive sound
 
   int count = 50;                                     // the max numbers of initializint the CAN-BUS, if initialize failed first!.
