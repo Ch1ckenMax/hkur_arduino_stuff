@@ -95,7 +95,8 @@ void loop()
 //  Serial.print(analogRead(THROTTLE_PIN_A));
 //  Serial.print("  ");
 //  Serial.println(analogRead(THROTTLE_PIN_B));
-  throttle = map(analogRead(THROTTLE_PIN_A) + analogRead(THROTTLE_PIN_B), 525, 1050, 0, MAX_TORQUE);
+  throttle = map(analogRead(THROTTLE_PIN_A) + analogRead(THROTTLE_PIN_B), 555, 1050, 0, MAX_TORQUE);
+//  Serial.println(throttle);
 
   // Prevent overflow..
   if (throttle > MAX_TORQUE) {
