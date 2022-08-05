@@ -26,22 +26,21 @@ uint8_t driveMode = 0; // 0 = reverse, 1 = neutral, 2 = drive
 bool inverterEnable = false;
 bool forward = true; // true = forward, false = reverse
 unsigned long previousMillis;
-uint8_t beeped = 0; // 0 = not beeped yet, 1 = beeping, 2 = beeping ended
+uint8_t beeped = 0; // 0 = no beeping, 1 = beeping, 2 = beeping ended
 
 void millisBeep() {
   unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= BEEP_INTERVAL) {
-    if (beeped == 0) {
-      Serial.println("Ready to Drive Sound ON");
-      digitalWrite(BEEP_PIN, HIGH);
-      beeped = 1;
-    }
-    else {
-      Serial.println("Ready to Drive Sound OFF");
-      digitalWrite(BEEP_PIN, LOW);
-      beeped = 2;
-    }
+  if (beeped == 0) {
+    Serial.println("Ready to Drive Sound ON");
+    digitalWrite(BEEP_PIN, HIGH);
+    beeped = 1;
     previousMillis = currentMillis;
+  }
+  else if (currentMillis - previousMillis >= BEEP_INTERVAL) {
+    digitalWrite(BEEP_PIN, LOW);
+    Serial.println("Ready to Drive Sound OFF");
+    beeped = 2;
+    return;
   }
 }
 
@@ -93,7 +92,7 @@ void setup()
 void loop()
 {
   //Read data and map them to suitable range
-  throttle = map(analogRead(THROTTLE_PIN_A) + analogRead(THROTTLE_PIN_B), 500, 1050, 0, MAX_TORQUE);
+  throttle = map(analogRead(THROTTLE_PIN_A) + analogRead(THROTTLE_PIN_B), 525, 1050, 0, MAX_TORQUE);
 
   // Prevent overflow..
   if (throttle > MAX_TORQUE) {
@@ -118,6 +117,10 @@ void loop()
     driveMode = 1;
     inverterEnable = false;
     forward = true;
+    if(beeped == 1){ //if its beeping, turn it off
+      digitalWrite(BEEP_PIN, LOW);
+      Serial.println("Ready to Drive Sound OFF");
+    }
     beeped = 0;
   }
 
@@ -130,11 +133,11 @@ void loop()
   generateDataPackage(TransmittPackage, throttle, 0, forward, inverterEnable, !inverterEnable, false, 0);
 
   //Debug message in serial
-  for (int i = 0; i < 8; i++) {
-    Serial.print(TransmittPackage[i]);
-    Serial.print("  ");
-  }
-  Serial.print("\n");
+  //for (int i = 0; i < 8; i++) {
+    //Serial.print(TransmittPackage[i]);
+    //Serial.print("  ");
+  //}
+  //Serial.print("\n");
 
   CAN.sendMsgBuf(0x0c0, 0, 8, TransmittPackage); //send
 }
