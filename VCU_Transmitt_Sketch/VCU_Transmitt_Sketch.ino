@@ -1,40 +1,75 @@
 #include <df_can.h>
 #include <SPI.h>
 
-//CAN bus config
-const uint8_t SPI_CS_PIN = 10;
-MCPCAN CAN(SPI_CS_PIN);
-#define CANBaudRate CAN_250KBPS
 
-// Drive mode config
-const uint8_t DRIVE_MODE_PIN = 4;
-const uint8_t REVERSE_MODE_PIN = 5;
+//Calibration algorithm (correctness not checked)
+//Variable calibrationProcess: int 0, 1, 2 (0: not calibrated, 1: only calibrated lift, 2: calibrated all)
+//calibrationinProgress = false
+//calibrationButton = digitalRead(some pins idk)
+//if 0:
+  //if calibration not in progress
+    //if calibrationButton is pressed
+      //change calibrationinprogress to true
+    //else
+      //sends signal to driver that shits need calibration, press the button to start calibrating
+  //else
+    //send signal to dashboard dont touch shit
+    //record the highest number recorded from both APPS
+    //wait for 100ms
+    //if already 100ms
+      //calibration in progress to false
+      //calibration process increment by 1
+      //throttle low threshold to apps value
+  //ends the loop function so throttle and stuff wont be triggered
+//if 1:
+  //same story as 0
+//if 2:
+  //good to go, no worry about anything
+    
 
-//Beep config
-const uint8_t BEEP_PIN = 8;
-const int BEEP_INTERVAL = 1500;
+//---Variables for config
 
-//Throttle config
-const int MAX_TORQUE = 50; //Set the max torque of the motor here
-const uint8_t THROTTLE_PIN_A = A0;
-const uint8_t THROTTLE_PIN_B = A1;
-const unsigned int THROTTLE_LOWER_BOUND = 280;
-const unsigned int THROTTLE_UPPER_BOUND = 440;
+  //CAN bus config
+  const uint8_t SPI_CS_PIN = 10;
+  MCPCAN CAN(SPI_CS_PIN);
+  #define CANBaudRate CAN_250KBPS
 
-//Other Variables
-INT8U TransmittPackage[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-long throttle = 0;
-uint8_t driveMode = 0; // 0 = reverse, 1 = neutral, 2 = drive
-bool inverterEnable = false;
-bool forward = true; // true = forward, false = reverse
-unsigned long previousMillis_beep;
-uint8_t beeped = 0; // 0 = no beeping, 1 = beeping, 2 = beeping ended
+  // Drive mode config
+  const uint8_t DRIVE_MODE_PIN = 4;
+  const uint8_t REVERSE_MODE_PIN = 5;
 
-bool implausibleInProgress = false;
-unsigned long previousMillis_APPS = 0;
+  //Beep config
+  const uint8_t BEEP_PIN = 8;
+  const int BEEP_INTERVAL = 1000;
 
-unsigned int APPS1 = 0;
-unsigned int APPS2 = 0; 
+  //Throttle config
+  const int MAX_TORQUE = 50; //Set the max torque of the motor here
+  const uint8_t THROTTLE_PIN_A = A0;
+  const uint8_t THROTTLE_PIN_B = A1;
+  const unsigned int THROTTLE_LOWER_BOUND = 90;
+  const unsigned int THROTTLE_UPPER_BOUND = 700;
+
+// ---Other Variables
+
+  //Data to CAN
+  INT8U TransmittPackage[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+  //Throttle
+  unsigned int APPS1 = 0;
+  unsigned int APPS2 = 0; 
+  long throttle = 0;
+  uint8_t driveMode = 0; // 0 = reverse, 1 = neutral, 2 = drive
+  bool inverterEnable = false;
+  bool forward = true; // true = forward, false = reverse
+
+  //Ready To Drive Sound
+  unsigned long previousMillis_beep;
+  uint8_t beeped = 0; // 0 = no beeping, 1 = beeping, 2 = beeping ended
+
+  //Implausible
+  bool implausibleEngineStop = false;
+  bool implausibleInProgress = false;
+  unsigned long previousMillis_APPS = 0;
 
 void millisBeep() {
   unsigned long currentMillis_beep = millis();
@@ -52,11 +87,28 @@ void millisBeep() {
   }
 }
 
+bool SCSFailure(){
+  //Check range
+
+  //Check out of range signal
+
+  //Check data corruption
+
+  //Check loss or delay of message
+
+  //Check other SCS failures
+
+  //If true, send safe or error signals?
+
+  return false; //Placeholder
+}
+
 //Check if throttle input is implausible according to rulebook T11.8.8 and T11.8.9
 //param APPS1, APPS2: raw input data
 //param range: the range for pedal travel
 bool implausible(){
-    return (abs(APPS1 - APPS2)/(float) THROTTLE_UPPER_BOUND - THROTTLE_LOWER_BOUND) >= 0.1 ;
+    bool hasThrottleDeviaion = (abs(APPS1 - APPS2)/(float) THROTTLE_UPPER_BOUND - THROTTLE_LOWER_BOUND) >= 0.1 ;
+    return hasThrottleDeviaion || SCSFailure();
 }
 
 //According to the rulebook T11.8.8 and T11.8.9
@@ -67,6 +119,7 @@ void millisAppsImplausibility(){
     if(implausibleInProgress){
       if(millis() - previousMillis_APPS > 80)
         Serial.println("STOP THE ENGINE!!!!");
+        implausibleEngineStop = true; //Now in engine stopped state
     }
     else{
       implausibleInProgress = true;
@@ -124,14 +177,22 @@ void setup()
 void loop()
 {
   //Read data and map them to suitable range
-  APPS1 = analogRead(THROTTLE_PIN_A) - 90;
+  APPS1 = analogRead(THROTTLE_PIN_A) - 305;
   APPS2 = analogRead(THROTTLE_PIN_B);
   millisAppsImplausibility();
-  //Serial.print(analogRead(THROTTLE_PIN_A));
-//  Serial.print("  ");
-  //Serial.println(analogRead(THROTTLE_PIN_B));
+  if(implausibleEngineStop){
+    //Resolve the implausible
+    //Tell engine to fucking stop
+    //Sends info to dashboard
+    //Any conditions to make implausibleEngineStop false again?
+    return; //Dont go below
+  }
+  Serial.print(analogRead(THROTTLE_PIN_A));
+  Serial.print("  ");
+  Serial.println(analogRead(THROTTLE_PIN_B));
+  Serial.print(" ");
   throttle = map((APPS1 + APPS2)/2, THROTTLE_LOWER_BOUND, THROTTLE_UPPER_BOUND, 0, MAX_TORQUE);
-//  Serial.println(throttle);
+  Serial.println(throttle);
 
   // Prevent overflow..
   if (throttle > MAX_TORQUE) {
@@ -173,10 +234,13 @@ void loop()
 
   //Debug message in serial
   //for (int i = 0; i < 8; i++) {
-    //Serial.print(TransmittPackage[i]);
+   //Serial.print(TransmittPackage[i]);
     //Serial.print("  ");
   //}
   //Serial.print("\n");
 
   CAN.sendMsgBuf(0x0c0, 0, 8, TransmittPackage); //send
 }
+
+
+  
