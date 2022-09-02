@@ -1,32 +1,6 @@
 #include <df_can.h>
 #include <SPI.h>
 
-
-//Calibration algorithm (correctness not checked)
-//Variable calibrationProcess: int 0, 1, 2 (0: not calibrated, 1: only calibrated lift, 2: calibrated all)
-//calibrationinProgress = false
-//calibrationButton = digitalRead(some pins idk)
-//if 0:
-  //if calibration not in progress
-    //if calibrationButton is pressed
-      //change calibrationinprogress to true
-    //else
-      //sends signal to driver that shits need calibration, press the button to start calibrating
-  //else
-    //send signal to dashboard dont touch shit
-    //record the highest number recorded from both APPS
-    //wait for 100ms
-    //if already 100ms
-      //calibration in progress to false
-      //calibration process increment by 1
-      //throttle low threshold to apps value
-  //ends the loop function so throttle and stuff wont be triggered
-//if 1:
-  //same story as 0
-//if 2:
-  //good to go, no worry about anything
-    
-
 //---Variables for config
 
   //CAN bus config
@@ -49,6 +23,9 @@
   const unsigned int THROTTLE_LOWER_BOUND = 90;
   const unsigned int THROTTLE_UPPER_BOUND = 700;
 
+  //Calibration config
+  const uint8_t CALIBRATION_BUTTON_PIN = null;
+
 // ---Other Variables
 
   //Data to CAN
@@ -70,6 +47,51 @@
   bool implausibleEngineStop = false;
   bool implausibleInProgress = false;
   unsigned long previousMillis_APPS = 0;
+
+  //Calibration
+  bool calibrationMode = false;
+  uint8_t calibrationState = 0; //represents the stage of calibration 
+  //calibrationCount = 0; need to implement a falling function?? to make it reliable
+  //variables for checking timestamp
+  unsigned long previousMillis_calibration = 0;
+  //....other stuff
+
+  //void detectButtonFall(){}
+
+void calibration(){
+  //check state
+  switch(calibrationState){
+    case 0: //Waiting for calibration button to be pressed. send appropriate signals.
+      //read button press
+      //if there is button press
+        //change state to 1
+        //record timestamp
+      //else
+        //Tell the driver to press throttle all the way down, press ready then wait for 1 second.
+    break;
+    case 1: //Calibrating throttle Max threshold...
+      //Check if 5 seconds has already passed
+      //if passed
+        //change state to 2
+      //else
+        //record throttle input (what to record?)
+    break;
+    case 2: //Waiting for calibration button to be pressed. send appropriate signals.
+    
+    break;
+    case 3: //Calibrating throttle Min threshold....
+    
+    break;
+    case 4: //Calibrating finished. Waiting for calibration button to be pressed to leave the calibration state?
+      //read button press
+      //If there is button press
+        //calibrationMode = 0, calibrationState =0. Go back to normal mode.
+      //else
+        //print message to tell drive to leave calibration mode
+    break;
+    default: //Error message
+  }
+}
 
 void millisBeep() {
   unsigned long currentMillis_beep = millis();
@@ -149,6 +171,7 @@ void setup()
   pinMode(DRIVE_MODE_PIN, INPUT_PULLUP); // setting up drive mode pins
   pinMode(REVERSE_MODE_PIN, INPUT_PULLUP); // reverse gear pin
   pinMode(BEEP_PIN, OUTPUT); // pin to trigger ready to drive sound
+  pinMode(CALIBRATION_BUTTON_PIN, INPUT); //jason double check thx
 
   //CAN bus connection initalization
   Serial.begin(115200);
@@ -179,6 +202,21 @@ void loop()
   //Read data and map them to suitable range
   APPS1 = analogRead(THROTTLE_PIN_A) - 305;
   APPS2 = analogRead(THROTTLE_PIN_B);
+
+  //Calibration stuff
+  if(calibrationMode){
+    calibration();
+    return;
+  }else{
+    if(digitalRead(CALIBRATION_BUTTON_PIN) == HIGH){
+      calibrationMode = true;
+      //calibrationCounter = 1
+      //record timestamp
+      return;
+    }
+  }
+
+  //Implausibility check stuff
   millisAppsImplausibility();
   if(implausibleEngineStop){
     //Resolve the implausible
