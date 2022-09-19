@@ -1,6 +1,8 @@
 #include <df_can.h>
 #include <SPI.h>
 
+//---Variables for config
+
 //CAN bus config
 const uint8_t SPI_CS_PIN = 10;
 MCPCAN CAN(SPI_CS_PIN);
@@ -12,37 +14,119 @@ const uint8_t REVERSE_MODE_PIN = 5;
 
 //Beep config
 const uint8_t BEEP_PIN = 8;
-const int BEEP_INTERVAL = 1500;
+const int BEEP_INTERVAL = 1000;
 
 //Throttle config
 const int MAX_TORQUE = 50; //Set the max torque of the motor here
 const uint8_t THROTTLE_PIN_A = A0;
 const uint8_t THROTTLE_PIN_B = A1;
+const unsigned int THROTTLE_LOWER_BOUND = 90;
+const unsigned int THROTTLE_UPPER_BOUND = 700;
 
-//Other Variables
+// ---Other Variables
+
+//Data to CAN
 INT8U TransmittPackage[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+//Throttle
+unsigned int APPS1 = 0;
+unsigned int APPS2 = 0;
 long throttle = 0;
 uint8_t driveMode = 0; // 0 = reverse, 1 = neutral, 2 = drive
 bool inverterEnable = false;
 bool forward = true; // true = forward, false = reverse
-unsigned long previousMillis;
+
+//Ready To Drive Sound
+unsigned long previousMillis_beep;
 uint8_t beeped = 0; // 0 = no beeping, 1 = beeping, 2 = beeping ended
 
+//Implausible
+bool implausibleEngineStop = false;
+bool implausibleInProgress = false;
+unsigned long previousMillis_APPS = 0;
+
+//SCSFailure
+long pre_throttle = throttle;
+String send_state;
+unsigned int CAN_errorCount = 0;
+
 void millisBeep() {
-  unsigned long currentMillis = millis();
+  unsigned long currentMillis_beep = millis();
   if (beeped == 0) {
     Serial.println("Ready to Drive Sound ON");
     digitalWrite(BEEP_PIN, HIGH);
     beeped = 1;
-    previousMillis = currentMillis;
+    previousMillis_beep = currentMillis_beep;
   }
-  else if (currentMillis - previousMillis >= BEEP_INTERVAL) {
+  else if (currentMillis_beep - previousMillis_beep >= BEEP_INTERVAL) {
     digitalWrite(BEEP_PIN, LOW);
     Serial.println("Ready to Drive Sound OFF");
     beeped = 2;
     return;
   }
 }
+
+bool SCSFailure() {
+  //Check range
+  if (APPS1 > 1023 || APPS1 < 0) {
+    return true;
+  }
+  if (APPS2 > 1023 || APPS2 < 0) {
+    return true;
+  }
+
+  //Check data corruption
+  //if there is very big sudden change in thottle input, 
+  //im talking about imposible type of big sudden change
+  // you know u fucked up
+  //this could only happen when u connect to APPS1 and APPS2 from GND to 5V
+  if (abs(throttle - pre_throttle) >= MAX_TORQUE) {
+    return true;
+  }
+  pre_throttle = throttle;
+  
+  //Check loss or delay of message
+  if (send_state != "CAN_OK") {
+    CAN_errorCount++;
+  }
+  //chechError(): Return: "CAN_CTRLERROR" means it sends the control error; Contrarily, return "CAN_OK".
+  if (CAN.checkError() != "CAN_OK") {
+    CAN_errorCount++;
+  }
+  
+  //Check other SCS failures
+
+  //If true, send safe or error signals?
+
+  return false; //Placeholder
+}
+
+//Check if throttle input is implausible according to rulebook T11.8.8 and T11.8.9
+//param APPS1, APPS2: raw input data
+//param range: the range for pedal travel
+bool implausible() {
+  bool hasThrottleDeviaion = (abs(APPS1 - APPS2) / (float) THROTTLE_UPPER_BOUND - THROTTLE_LOWER_BOUND) >= 0.1 ;
+  return hasThrottleDeviaion || SCSFailure();
+}
+
+//According to the rulebook T11.8.8 and T11.8.9
+void millisAppsImplausibility() {
+  if (!implausible()) {
+    implausibleInProgress = false;
+  }
+  else {
+    if (implausibleInProgress) {
+      if (millis() - previousMillis_APPS > 80)
+        Serial.println("STOP THE ENGINE!!!!");
+      implausibleEngineStop = true; //Now in engine stopped state
+    }
+    else {
+      implausibleInProgress = true;
+      previousMillis_APPS = millis();
+    }
+  }
+}
+
 
 //Generates the 8 byte dataPackage to be sent to the motor controller
 //Torque: in N.m. times 10, eg 30 = 3Nm
@@ -92,7 +176,35 @@ void setup()
 void loop()
 {
   //Read data and map them to suitable range
-  throttle = map(analogRead(THROTTLE_PIN_A) + analogRead(THROTTLE_PIN_B), 525, 1050, 0, MAX_TORQUE);
+  APPS1 = analogRead(THROTTLE_PIN_A) - 305;
+  APPS2 = analogRead(THROTTLE_PIN_B);
+
+  //Implausibility check stuff
+  millisAppsImplausibility();
+  if (implausibleEngineStop) {
+    //Resolve the implausible
+    //Tell engine to fucking stop
+    //Sends info to dashboard
+    //Any conditions to make implausibleEngineStop false again?
+
+    //Jason: well we neeed to make sure the vehicle is stopped b4 resetting it.
+    //we will be recieving the motor speed from the MCU too.
+    //Yup, this vcu will not only transmitt, but also recieves. So we are fucked
+    //But i will be helpful... After finish working with the battery HV shit
+
+    //generateDataPackage(INT8U dataArr[], int torque, int angularVelocity, bool directionForward, bool inverter, bool inverterDischarge, bool speedMode, int torqueLimit)
+    generateDataPackage(TransmittPackage, 0, 0, forward, false, true, false, 0);
+    CAN.sendMsgBuf(0x0c0, 0, 8, TransmittPackage); //send
+    delay(100);
+    return; //Dont go below
+  }
+
+  Serial.print(analogRead(THROTTLE_PIN_A));
+  Serial.print("  ");
+  Serial.println(analogRead(THROTTLE_PIN_B));
+  Serial.print(" ");
+  throttle = map((APPS1 + APPS2) / 2, THROTTLE_LOWER_BOUND, THROTTLE_UPPER_BOUND, 0, MAX_TORQUE);
+  Serial.println(throttle);
 
   // Prevent overflow..
   if (throttle > MAX_TORQUE) {
@@ -105,19 +217,19 @@ void loop()
   // setting up driveMode
   if (!digitalRead(DRIVE_MODE_PIN)) {
     driveMode = 2;
-    inverterEnable = true;
+    inverterEnable = throttle >= 2;
     forward = true;
   }
   else if (!digitalRead(REVERSE_MODE_PIN)) {
     driveMode = 0;
-    inverterEnable = true;
+    inverterEnable = throttle >= 2;
     forward = false;
   }
   else {
     driveMode = 1;
     inverterEnable = false;
     forward = true;
-    if(beeped == 1){ //if its beeping, turn it off
+    if (beeped == 1) { //if its beeping, turn it off
       digitalWrite(BEEP_PIN, LOW);
       Serial.println("Ready to Drive Sound OFF");
     }
@@ -132,12 +244,15 @@ void loop()
   //generateDataPackage(INT8U dataArr[], int torque, int angularVelocity, bool directionForward, bool inverter, bool inverterDischarge, bool speedMode, int torqueLimit)
   generateDataPackage(TransmittPackage, throttle, 0, forward, inverterEnable, !inverterEnable, false, 0);
 
-  //Debug message in serial
-  //for (int i = 0; i < 8; i++) {
-    //Serial.print(TransmittPackage[i]);
-    //Serial.print("  ");
-  //}
-  //Serial.print("\n");
+  //  Debug message in serial
+  //  for (int i = 0; i < 8; i++) {
+  //   Serial.print(TransmittPackage[i]);
+  //    Serial.print("  ");
+  //  }
+  //  Serial.print("\n");
 
-  CAN.sendMsgBuf(0x0c0, 0, 8, TransmittPackage); //send
+  //this send function actually returns "CAN_OK" if send success,
+  //returns "CAN_SENDMSGTIMEOUT" if timeout
+  //or returns "CAN_GETTXBFTIMEOUT" if failed to get the next free buffer
+  send_state = CAN.sendMsgBuf(0x0c0, 0, 8, TransmittPackage); //send
 }
