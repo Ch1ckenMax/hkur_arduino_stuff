@@ -56,7 +56,21 @@
   unsigned long previousMillis_calibration = 0;
   //....other stuff
 
-  //void detectButtonFall(){}
+  //Detect Falling Edge of Calibration Button
+  bool previousCalibrationButtonState = HIGH;
+  void detectButtonFall() {
+    bool CalibrationButtonState = digitalRead(CALIBRATION_BUTTON_PIN);
+    if (CalibrationButtonState != previousCalibrationButtonState) {
+      if (CalibrationButtonState == LOW) {
+        previousCalibrationButtonState = CalibrationButtonState;
+        return true;
+      }
+      else {
+        previousCalibrationButtonState = CalibrationButtonState;
+        return false;
+      }
+    }
+  }
 
 void calibration(){
   //check state
@@ -171,7 +185,7 @@ void setup()
   pinMode(DRIVE_MODE_PIN, INPUT_PULLUP); // setting up drive mode pins
   pinMode(REVERSE_MODE_PIN, INPUT_PULLUP); // reverse gear pin
   pinMode(BEEP_PIN, OUTPUT); // pin to trigger ready to drive sound
-  pinMode(CALIBRATION_BUTTON_PIN, INPUT); //jason double check thx
+  pinMode(CALIBRATION_BUTTON_PIN, INPUT_PULLUP); //jason double check thx
 
   //CAN bus connection initalization
   Serial.begin(115200);
@@ -208,7 +222,7 @@ void loop()
     calibration();
     return;
   }else{
-    if(digitalRead(CALIBRATION_BUTTON_PIN) == HIGH){
+    if(digitalRead(CALIBRATION_BUTTON_PIN) == LOW){ // cuz INPUT_PULLUP will originally HIGH, LOW when button pressed
       calibrationMode = true;
       //calibrationCounter = 1
       //record timestamp
